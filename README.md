@@ -13,6 +13,8 @@ A production-ready framework for building LLM multi-agent applications using Pyt
 | Vector Database | ChromaDB |
 | State/Cache | Redis |
 | Containerization | Docker |
+| Patent Pipeline LLM | Google Gemini |
+| Document Storage | Azure Blob Storage |
 
 ## Project Structure
 
@@ -36,6 +38,14 @@ multiagent/
 │   │   └── vector_store.py # ChromaDB vector memory
 │   ├── api/              # FastAPI application
 │   │   └── routes/       # API endpoints
+│   ├── patent_pipeline/  # Patent litigation report pipeline
+│   │   ├── graph.py      # LangGraph workflow definition
+│   │   ├── state.py      # Pipeline state definition
+│   │   ├── nodes/        # Processing nodes (stages 1-4)
+│   │   ├── services/     # Gemini client & Azure integration
+│   │   ├── prompts/      # LLM prompt templates
+│   │   ├── techpacks/    # Domain-specific tech packs
+│   │   └── models/       # Request/response models
 │   └── config.py         # Configuration
 ├── tests/                # Test suite
 ├── pyproject.toml        # Dependencies
@@ -173,6 +183,104 @@ In-depth research with analysis:
 2. **Deep Analysis** - Detailed investigation
 3. **Review** - Quality assessment
 4. **Report Generation** - Final consolidated report
+
+## Patent Litigation Report Pipeline
+
+A specialized multi-stage pipeline for generating comprehensive patent litigation reports from prosecution history documents.
+
+### Pipeline Architecture
+
+```
+Ingest PDFs (Azure Blob Storage)
+         ↓
+Stage 1 – Record Extraction
+         ↓
+Tech Pack Router
+         ↓
+Stage 2A – Claim Construction & Estoppel
+         ↓
+Stage 2B – Search & Technical Premise
+         ↓
+Stage 2C – Timeline & Global Synthesis
+         ↓
+Stage 2 Merge
+         ↓
+    ┌────┴────┐
+    ↓         ↓
+Stage 3   Search Intel (parallel)
+    ↓         ↓
+Stage 4      │
+    ↓         │
+    └────┬────┘
+         ↓
+Save Reports → Azure Blob Storage
+```
+
+### Pipeline Stages
+
+| Stage | Name | Purpose | Output |
+|-------|------|---------|--------|
+| Ingest | PDF Ingestion | Download PDFs from Azure Blob | Binary PDF data |
+| 1 | Record Extraction | Parse prosecution history to JSON | Structured events, claims, quotes |
+| Router | Tech Pack Router | Select domain-specific guidance | Tech pack content |
+| 2A | Claim Construction | Analyze claims & estoppel | Construction rows, estoppel matrix |
+| 2B | Search Analysis | Analyze examiner search patterns | Technical reps, search gaps |
+| 2C | Timeline Synthesis | Chronological analysis | Event forensics, global findings |
+| 3 | Report Generation | Generate litigation report | Markdown report |
+| 4 | QC Verification | Quality control & corrections | QC JSON, final report |
+| Search Intel | Search Intelligence | Prior art search analysis | Search intelligence report |
+
+### Patent Pipeline API
+
+```bash
+# Generate report (synchronous)
+curl -X POST http://localhost:8000/api/v1/patent-reports/generate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "patent_pdf_url": "https://storage.blob.core.windows.net/.../patent.pdf",
+    "history_pdf_url": "https://storage.blob.core.windows.net/.../history.pdf"
+  }'
+
+# Generate report (asynchronous)
+curl -X POST http://localhost:8000/api/v1/patent-reports/generate-async \
+  -H "Content-Type: application/json" \
+  -d '{
+    "patent_pdf_url": "https://storage.blob.core.windows.net/.../patent.pdf",
+    "history_pdf_url": "https://storage.blob.core.windows.net/.../history.pdf"
+  }'
+
+# Check job status
+curl http://localhost:8000/api/v1/patent-reports/status/{job_id}
+```
+
+### Patent Pipeline Configuration
+
+Additional environment variables for the patent pipeline:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GOOGLE_API_KEY` | Google Gemini API key | Required for patent pipeline |
+| `AZURE_STORAGE_CONNECTION_STRING` | Azure Blob connection | Required for patent pipeline |
+| `AZURE_STORAGE_CONTAINER` | Azure container name | `patent-documents` |
+| `GEMINI_MODEL` | Gemini model name | `gemini-1.5-pro` |
+| `GEMINI_TEMPERATURE` | Generation temperature | `0.1` |
+| `GEMINI_MAX_OUTPUT_TOKENS` | Max output tokens | `8192` |
+
+### Tech Packs
+
+Tech packs provide domain-specific guidance based on USPTO Technology Centers:
+
+- TC 1600: Biotechnology & Organic Chemistry
+- TC 1700: Chemical & Materials Engineering
+- TC 2100: Computer Architecture & Software
+- TC 2400: Networking & Cryptography
+- TC 2600: Communications
+- TC 2800: Semiconductors
+- TC 2900: Designs
+- TC 3600: E-Commerce & Business Methods
+- TC 3700: Mechanical & Medical Devices
+
+See `src/patent_pipeline/techpacks/readme.md` for details.
 
 ## Running Tests
 
