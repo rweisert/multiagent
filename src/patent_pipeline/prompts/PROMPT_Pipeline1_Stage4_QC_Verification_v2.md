@@ -953,4 +953,106 @@ Example:
 
 ---
 
+## AGENT-BASED WORKFLOW SUPPORT
+
+When operating in an agent-based workflow with revision loops, the QC output must support automated decision-making by the Supervisor and feedback to the Writer Agent.
+
+### Enhanced Output Fields for Agent Workflow
+
+Add these fields to the `overall_assessment` object:
+
+```json
+{
+  "overall_assessment": {
+    "quality_grade": "A | B | C | D | F",
+    "quality_grade_rationale": "...",
+    "total_issues": 5,
+    "critical_issues": 0,
+    "major_issues": 2,
+    "minor_issues": 3,
+    "auto_fixed_issues": 4,
+    "ready_for_litigation": true | false,
+
+    "revision_needed": true | false,
+    "revision_priority_issues": [
+      {
+        "id": "ISSUE01",
+        "reason": "Critical factual error in Executive Summary"
+      }
+    ],
+    "clarification_needed": true | false,
+    "clarification_questions": [
+      {
+        "question_id": "CLARIFY01",
+        "question": "Stage2 estoppel_matrix shows HIGH risk but rationale is unclear - please explain the basis for this assessment",
+        "context": "Section VIII mentions LOW risk for same limitation"
+      }
+    ],
+    "numeric_score": 8
+  }
+}
+```
+
+### Field Definitions
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `revision_needed` | boolean | True if report requires Writer revision before finalization |
+| `revision_priority_issues` | array | Top 3-5 issues to address first (ordered by importance) |
+| `clarification_needed` | boolean | True if Analyst clarification needed before Writer can revise |
+| `clarification_questions` | array | Questions for Analyst Agent about Stage2 data |
+| `numeric_score` | integer | Score 0-10 for automated threshold checking |
+
+### Revision Triggers
+
+Set `revision_needed: true` when ANY of these conditions apply:
+- Quality grade is D or F
+- Any critical issue exists (regardless of auto-fix status)
+- 3 or more major issues exist
+- `ready_for_litigation: false`
+
+### Clarification Triggers
+
+Set `clarification_needed: true` when:
+- Stage3 report contradicts Stage2 data and the contradiction cannot be resolved from available data
+- Stage2 analysis appears incomplete or inconsistent
+- Multiple estoppel assessments conflict
+
+### Score Calculation
+
+Calculate `numeric_score` (0-10) as follows:
+
+| Grade | Base Score | Adjustments |
+|-------|------------|-------------|
+| A | 10 | -0 |
+| B | 8 | -0.5 per major issue |
+| C | 6 | -1 per major issue |
+| D | 4 | -2 per critical issue |
+| F | 2 | -2 per critical issue |
+
+Final score = max(0, base - adjustments)
+
+### Feedback for Writer Agent
+
+When `revision_needed: true`, structure issues for Writer consumption:
+
+```json
+{
+  "qc_issues": [
+    {
+      "issue": "Quote in Section I differs from Stage1",
+      "type": "quote_mismatch",
+      "severity": "major",
+      "location": "Section I, paragraph 2",
+      "correction": "Replace with: 'The prior art of record does not teach...'",
+      "stage1_reference": "key_quotes.allowance_reasons[0]"
+    }
+  ]
+}
+```
+
+This format allows the Writer Agent to systematically address each issue.
+
+---
+
 **Output JSON, then delimiter, then Markdown. Nothing else.**

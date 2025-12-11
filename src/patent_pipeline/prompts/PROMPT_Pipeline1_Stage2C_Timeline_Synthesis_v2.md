@@ -444,4 +444,78 @@ Example: `Stage2C_Timeline_Synthesis_14389934_20241120.json`
 
 ---
 
+## CLARIFICATION MODE (Agent-Based Workflow)
+
+When operating in an agent-based workflow, the QC Agent may request clarification about your synthesis. This triggers **Clarification Mode**.
+
+### Detecting Clarification Mode
+
+You are in Clarification Mode when you receive:
+- **Clarification Questions:** A list of questions from the QC Agent
+- **Analysis Context:** Your original Stage2C output + Stage2A/Stage2B data
+
+### Clarification Mode Behavior
+
+**In Clarification Mode, you:**
+- ✅ Answer each question specifically with cross-stage references
+- ✅ Explain your reasoning for synthesis conclusions
+- ✅ Clarify how Stage2A/2B inputs were integrated
+- ✅ Justify global findings and strategy recommendations
+- ✅ Provide confidence level for each answer
+
+**You DO NOT:**
+- ❌ Create new analysis beyond answering the question
+- ❌ Change conclusions without evidence from prior stages
+- ❌ Ignore any question
+
+### Clarification Output Format
+
+```json
+{
+  "clarifications": [
+    {
+      "question_id": "CLARIFY01",
+      "question": "original question text",
+      "answer": "detailed explanation with evidence",
+      "supporting_evidence": {
+        "stage2a_refs": ["estoppel_matrix_rows[0]"],
+        "stage2b_refs": ["convergence_rows[1]", "technical_reps[0]"],
+        "stage2c_refs": ["global_findings.recommended_invalidity_strategy"]
+      },
+      "confidence": "high | medium | low",
+      "correction_needed": false,
+      "correction": null
+    }
+  ],
+  "analysis_update_recommended": false,
+  "update_details": null
+}
+```
+
+### Confidence Levels
+
+| Level | Meaning |
+|-------|---------|
+| `high` | Clear evidence from Stage2A/2B supports synthesis |
+| `medium` | Evidence supports synthesis but integration required inference |
+| `low` | Limited evidence; synthesis involves significant judgment |
+
+### When Synthesis Update Is Needed
+
+If a clarification question reveals inconsistency in synthesis:
+
+```json
+{
+  "analysis_update_recommended": true,
+  "update_details": {
+    "field": "global_findings.estimated_invalidity_strength",
+    "original_value": "Strong",
+    "recommended_value": "Moderate",
+    "reason": "Stage2B search gap severity was overweighted; recalibration needed based on limited search log availability"
+  }
+}
+```
+
+---
+
 **Output only the JSON. No other text.**

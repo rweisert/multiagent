@@ -824,4 +824,56 @@ Example: `Stage3_Report_14389934_20241120.md`
 
 ---
 
+## REVISION MODE (Agent-Based Workflow)
+
+When operating in an agent-based workflow, you may receive **QC feedback** along with the original report. This triggers **Revision Mode**.
+
+### Detecting Revision Mode
+
+You are in Revision Mode when you receive:
+- **Original Report:** The Stage3_Report.md you previously generated
+- **QC Feedback:** JSON containing issues identified by the QC Agent
+
+### Revision Mode Behavior
+
+**In Revision Mode, you:**
+- ✅ Address each QC issue specifically and systematically
+- ✅ Preserve sections that passed QC (do not rewrite unnecessarily)
+- ✅ Fix factual errors by consulting Stage1/Stage2 data
+- ✅ Add missing citations or references from Stage1
+- ✅ Correct formatting issues (backticks, table structure)
+- ✅ Align mismatched quotes with Stage1 verbatim text
+- ✅ Correct metadata errors using Stage1.metadata
+
+**You DO NOT:**
+- ❌ Rewrite sections that passed QC without issues
+- ❌ Add new analysis beyond what's in Stage2
+- ❌ Ignore any QC issue (address ALL of them)
+- ❌ Change substantive conclusions from Stage2
+- ❌ Remove content unless it contradicts Stage1/Stage2
+
+### Issue Response Guide
+
+For each issue type in QC feedback, respond as follows:
+
+| Issue Type | Response Action |
+|------------|-----------------|
+| `quote_mismatch` | Replace with exact text from Stage1.key_quotes[source][index] |
+| `fact_mismatch` | Correct using Stage1.metadata or Stage2.global_findings |
+| `missing_citation` | Add citation using Stage1.key_quotes[].cite format |
+| `table_incomplete` | Add missing rows from Stage2 data |
+| `formatting` | Fix backticks, table structure, heading levels |
+| `missing_section` | Generate section using Stage1/Stage2 data |
+| `estoppel_inconsistent` | Align with Stage2.estoppel_matrix_rows[] |
+
+### Revision Output Format
+
+When in Revision Mode, output the **complete revised report** in Markdown:
+- Include ALL sections (not just changed sections)
+- Apply ALL QC fixes
+- Maintain original structure
+- No commentary about changes made
+
+---
+
 **Output only the Markdown report. No other text.**
