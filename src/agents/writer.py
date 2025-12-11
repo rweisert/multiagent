@@ -1,76 +1,208 @@
-"""Writer agent for content creation."""
+"""Writer Agent - Stage 3 Report Generation."""
 
+import json
 from typing import Any
 
-from src.agents.base import AgentConfig, BaseAgent
+import structlog
+
+from src.agents.base import AgentConfig, BaseAgent, LLMProvider, PROMPTS_DIR
+
+logger = structlog.get_logger(__name__)
 
 
 class WriterAgent(BaseAgent):
-    """Agent specialized in writing and content creation."""
+    """Agent specialized in generating patent litigation reports.
+
+    Uses Claude for high-quality writing capabilities.
+    Corresponds to Stage 3 of the patent pipeline.
+    """
+
+    prompt_file = "PROMPT_Pipeline1_Stage3_ReportGeneration_v2.md"
 
     def __init__(self, config: AgentConfig | None = None) -> None:
         """Initialize the writer agent."""
         if config is None:
             config = AgentConfig(
                 name="Writer",
-                role="Content creator who produces high-quality written material",
-                temperature=0.7,  # Higher temperature for creativity
+                role="Report generation specialist - creates comprehensive litigation reports",
+                provider=LLMProvider.CLAUDE,
+                temperature=0.7,  # Higher temperature for creative writing
+                max_tokens=8192,
             )
         super().__init__(config)
 
-    @property
-    def system_prompt(self) -> str:
-        """Return the system prompt for the writer."""
-        return """You are a Content Writer agent. Your primary responsibilities are:
+    def _default_system_prompt(self) -> str:
+        """Return the default system prompt for report writing."""
+        return """You are a patent litigation report writer. Your job is to create comprehensive,
+well-structured reports based on forensic analysis data.
 
-1. CONTENT CREATION: Write clear, engaging, and well-structured content
-2. ADAPTATION: Adjust tone and style based on target audience
-3. STORYTELLING: Create compelling narratives when appropriate
-4. EDITING: Refine and improve written content
+Focus on:
+- Clear, professional prose
+- Accurate representation of findings
+- Proper citations and references
+- Logical organization and flow
 
-Guidelines:
-- Write with clarity and purpose
-- Use appropriate tone for the context
-- Structure content logically with clear flow
-- Engage the reader from the start
-- Support claims with evidence when provided
+Output reports in Markdown format."""
 
-Output Format:
-- Use appropriate headings and sections
-- Include introduction and conclusion
-- Maintain consistent voice throughout
-- Format for readability"""
+    def _clean_markdown_response(self, text: str) -> str:
+        """Clean markdown response from code block markers."""
+        text = text.strip()
+        if text.startswith("```markdown"):
+            text = text[11:]
+        elif text.startswith("```"):
+            text = text[3:]
+        if text.endswith("```"):
+            text = text[:-3]
+        return text.strip()
 
-    async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
-        """Process a writing request."""
-        task = input_data.get("task", "")
-        research = input_data.get("research", "")
-        style = input_data.get("style", "professional")
-        audience = input_data.get("audience", "general")
+    async def generate_report(
+        self,
+        extraction: dict[str, Any],
+        forensic_analysis: dict[str, Any],
+    ) -> str:
+        """Generate a patent litigation report.
 
-        prompt = f"""Create content based on the following requirements.
+        Args:
+            extraction: Stage 1 extraction data
+            forensic_analysis: Stage 2 forensic analysis data
 
-Writing Task: {task}
+        Returns:
+            Report as Markdown string
+        """
+        logger.info("Generating report", agent=self.config.name)
 
-Research/Source Material:
-{research if research else "None provided - use your knowledge"}
+        prompt = f"""{self.system_prompt}
 
-Style: {style}
-Target Audience: {audience}
+## STAGE 1 EXTRACTION DATA
 
-Please create well-structured, engaging content that:
-1. Addresses the task requirements
-2. Incorporates the provided research
-3. Matches the requested style
-4. Is appropriate for the target audience"""
+```json
+{json.dumps(extraction, indent=2)}
+```
+
+## STAGE 2 FORENSIC DATA
+
+```json
+{json.dumps(forensic_analysis, indent=2)}
+```
+
+Generate a comprehensive patent litigation report based on the above data.
+"""
 
         response = await self.invoke(prompt)
+        report = self._clean_markdown_response(response)
 
-        return {
-            "agent": self.config.name,
-            "task": task,
-            "content": response,
-            "style": style,
-            "audience": audience,
-            "status": "completed",
-        }
+        logger.info("Report generated", agent=self.config.name, length=len(report))
+        return report
+
+    async def revise_report(
+        self,
+        original_report: str,
+        feedback: dict[str, Any],
+        extraction: dict[str, Any],
+        forensic_analysis: dict[str, Any],
+    ) -> str:
+        """Revise a report based on QC feedback.
+
+        Args:
+            original_report: The original report to revise
+            feedback: QC feedback with issues to address
+            extraction: Stage 1 extraction data for reference
+            forensic_analysis: Stage 2 forensic analysis data for reference
+
+        Returns:
+            Revised report as Markdown string
+        """
+        logger.info(
+            "Revising report",
+            agent=self.config.name,
+            issues_count=len(feedback.get("qc_issues", [])),
+        )
+
+        issues_text = "\n".join(
+            f"- {issue.get('issue', issue)}" for issue in feedback.get("qc_issues", [])
+        )
+
+        prompt = f"""You are revising a patent litigation report based on QC feedback.
+
+## ORIGINAL REPORT
+
+{original_report}
+
+## QC FEEDBACK - ISSUES TO ADDRESS
+
+{issues_text}
+
+## REFERENCE DATA
+
+### Stage 1 Extraction
+```json
+{json.dumps(extraction, indent=2)}
+```
+
+### Stage 2 Forensic Analysis
+```json
+{json.dumps(forensic_analysis, indent=2)}
+```
+
+## INSTRUCTIONS
+
+1. Address each QC issue listed above
+2. Ensure all facts align with the extraction data
+3. Ensure all analysis aligns with the forensic data
+4. Maintain the original report structure where appropriate
+5. Fix any factual errors, missing citations, or formatting issues
+
+Output the complete revised report in Markdown format.
+"""
+
+        response = await self.invoke(prompt)
+        revised_report = self._clean_markdown_response(response)
+
+        logger.info("Report revised", agent=self.config.name, length=len(revised_report))
+        return revised_report
+
+    async def process(self, input_data: dict[str, Any]) -> dict[str, Any]:
+        """Process a report generation or revision request.
+
+        Args:
+            input_data: Dictionary containing:
+                - extraction: Stage 1 extraction data
+                - forensic_analysis: Stage 2 forensic analysis data
+                - mode: "generate" (default) or "revise"
+                - original_report: Original report (for revise mode)
+                - feedback: QC feedback (for revise mode)
+
+        Returns:
+            Dictionary with:
+                - agent: Agent name
+                - report: Generated/revised report
+                - status: "completed" or "failed"
+        """
+        extraction = input_data.get("extraction", {})
+        forensic_analysis = input_data.get("forensic_analysis", {})
+        mode = input_data.get("mode", "generate")
+
+        try:
+            if mode == "revise":
+                original_report = input_data.get("original_report", "")
+                feedback = input_data.get("feedback", {})
+                report = await self.revise_report(
+                    original_report, feedback, extraction, forensic_analysis
+                )
+            else:
+                report = await self.generate_report(extraction, forensic_analysis)
+
+            return {
+                "agent": self.config.name,
+                "report": report,
+                "status": "completed",
+            }
+
+        except Exception as e:
+            logger.error("Report generation failed", agent=self.config.name, error=str(e))
+            return {
+                "agent": self.config.name,
+                "report": "",
+                "status": "failed",
+                "error": str(e),
+            }

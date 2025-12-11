@@ -6,7 +6,7 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import agents, workflows, health, patent_reports
+from src.api.routes import health, patent_reports
 from src.config import get_settings
 
 
@@ -46,8 +46,6 @@ def create_app() -> FastAPI:
 
     # Include routers
     app.include_router(health.router, tags=["Health"])
-    app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"])
-    app.include_router(workflows.router, prefix="/api/v1/workflows", tags=["Workflows"])
     app.include_router(
         patent_reports.router,
         prefix="/api/v1",

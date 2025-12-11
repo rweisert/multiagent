@@ -1,9 +1,12 @@
-"""LangGraph workflows for multi-agent orchestration."""
+"""LangGraph workflows for patent pipeline orchestration."""
 
-from src.workflows.content_pipeline import ContentPipelineWorkflow
-from src.workflows.research_workflow import ResearchWorkflow
+from src.workflows.state import PatentWorkflowState, create_initial_state
+from src.workflows.patent_workflow import PatentWorkflow, patent_workflow, run_patent_workflow
 
 __all__ = [
-    "ContentPipelineWorkflow",
-    "ResearchWorkflow",
+    "PatentWorkflowState",
+    "create_initial_state",
+    "PatentWorkflow",
+    "patent_workflow",
+    "run_patent_workflow",
 ]

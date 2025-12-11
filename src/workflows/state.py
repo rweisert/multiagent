@@ -1,56 +1,99 @@
-"""Workflow state definitions using TypedDict for LangGraph."""
+"""Workflow state definitions for patent pipeline."""
 
-from typing import Annotated, TypedDict
-
-from langgraph.graph.message import add_messages
-from langchain_core.messages import BaseMessage
+from typing import Any, TypedDict
 
 
-class ContentPipelineState(TypedDict):
-    """State for the content creation pipeline workflow."""
+class PatentWorkflowState(TypedDict, total=False):
+    """State for the agent-based patent workflow.
+
+    This state flows through all agents in the pipeline.
+    """
 
     # Input
-    topic: str
-    style: str
-    audience: str
+    patent_pdf_url: str
+    history_pdf_url: str
+    patent_pdf_bytes: bytes
+    history_pdf_bytes: bytes
 
-    # Messages (for agent communication)
-    messages: Annotated[list[BaseMessage], add_messages]
+    # Pipeline tracking
+    current_stage: str  # start, extracted, analyzed, written, qc_complete, revised, clarified, finalized
+    status: str  # pending, running, completed, failed
+    error: str | None
 
-    # Research phase
-    research_findings: str
-    research_complete: bool
+    # Iteration tracking
+    revision_count: int
+    clarification_count: int
 
-    # Writing phase
-    draft_content: str
-    writing_complete: bool
+    # Tech pack
+    tech_center: str
+    tech_pack_content: str
 
-    # Review phase
-    review_feedback: str
-    review_score: int
-    review_complete: bool
+    # Stage 1 - Extraction (Extractor Agent)
+    extraction: dict[str, Any]
+
+    # Stage 2 - Analysis (Analyst Agent)
+    forensic_analysis: dict[str, Any]
+    clarification_answers: dict[str, Any]
+
+    # Stage 3 - Report (Writer Agent)
+    report: str
+    report_history: list[str]  # Previous versions for tracking
+
+    # Stage 4 - QC (QC Agent)
+    qc_result: dict[str, Any]
+    qc_score: int
+    qc_passed: bool
+    needs_revision: bool
+    needs_clarification: bool
+    clarification_questions: list[str]
+    corrected_report: str
 
     # Final output
-    final_content: str
-    status: str
-    iteration_count: int
-
-
-class ResearchState(TypedDict):
-    """State for a research-focused workflow."""
-
-    # Input
-    query: str
-    depth: str  # 'quick', 'standard', 'deep'
-
-    # Messages
-    messages: Annotated[list[BaseMessage], add_messages]
-
-    # Research phases
-    initial_findings: str
-    detailed_analysis: str
-    sources: list[str]
-
-    # Output
     final_report: str
-    status: str
+    stage3_url: str
+    stage4_url: str
+    search_intel_url: str
+
+
+def create_initial_state(
+    patent_pdf_url: str,
+    history_pdf_url: str,
+) -> PatentWorkflowState:
+    """Create initial workflow state.
+
+    Args:
+        patent_pdf_url: URL to the issued patent PDF
+        history_pdf_url: URL to the prosecution history PDF
+
+    Returns:
+        Initial PatentWorkflowState
+    """
+    return PatentWorkflowState(
+        patent_pdf_url=patent_pdf_url,
+        history_pdf_url=history_pdf_url,
+        patent_pdf_bytes=b"",
+        history_pdf_bytes=b"",
+        current_stage="start",
+        status="pending",
+        error=None,
+        revision_count=0,
+        clarification_count=0,
+        tech_center="2100",  # Default, will be detected
+        tech_pack_content="",
+        extraction={},
+        forensic_analysis={},
+        clarification_answers={},
+        report="",
+        report_history=[],
+        qc_result={},
+        qc_score=0,
+        qc_passed=False,
+        needs_revision=False,
+        needs_clarification=False,
+        clarification_questions=[],
+        corrected_report="",
+        final_report="",
+        stage3_url="",
+        stage4_url="",
+        search_intel_url="",
+    )

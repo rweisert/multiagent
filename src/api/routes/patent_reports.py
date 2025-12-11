@@ -13,6 +13,7 @@ from src.patent_pipeline.models.requests import (
 )
 from src.patent_pipeline.graph import run_patent_pipeline
 from src.patent_pipeline.state import PatentPipelineState
+from src.workflows import run_patent_workflow
 
 logger = structlog.get_logger(__name__)
 
@@ -218,6 +219,7 @@ async def _run_pipeline_background(
     job_id: str,
     patent_pdf_url: str,
     history_pdf_url: str,
+    use_agents: bool = False,
 ) -> None:
     """Run pipeline in background task.
 
@@ -225,19 +227,27 @@ async def _run_pipeline_background(
         job_id: Job identifier
         patent_pdf_url: URL to patent PDF
         history_pdf_url: URL to history PDF
+        use_agents: If True, use agent-based workflow; otherwise use direct pipeline
     """
-    logger.info("Background pipeline started", job_id=job_id)
+    logger.info("Background pipeline started", job_id=job_id, use_agents=use_agents)
 
     try:
         _jobs[job_id]["status"] = "processing"
         _jobs[job_id]["current_stage"] = "ingest_pdfs"
         _jobs[job_id]["progress_percent"] = 5.0
 
-        # Run the pipeline
-        result = run_patent_pipeline(
-            patent_pdf_url=patent_pdf_url,
-            history_pdf_url=history_pdf_url,
-        )
+        if use_agents:
+            # Use the new agent-based workflow
+            result = await run_patent_workflow(
+                patent_pdf_url=patent_pdf_url,
+                history_pdf_url=history_pdf_url,
+            )
+        else:
+            # Use the direct pipeline
+            result = run_patent_pipeline(
+                patent_pdf_url=patent_pdf_url,
+                history_pdf_url=history_pdf_url,
+            )
 
         if result.get("status") == "failed":
             _jobs[job_id]["status"] = "failed"
@@ -251,6 +261,8 @@ async def _run_pipeline_background(
                 "stage3_url": result.get("stage3_url"),
                 "stage4_url": result.get("stage4_url"),
                 "search_intel_url": result.get("search_intel_url"),
+                "qc_score": result.get("qc_score"),
+                "revision_count": result.get("revision_count", 0),
                 "status": "completed",
             }
 
@@ -258,6 +270,7 @@ async def _run_pipeline_background(
             "Background pipeline completed",
             job_id=job_id,
             status=_jobs[job_id]["status"],
+            qc_score=result.get("qc_score"),
         )
 
     except Exception as e:
@@ -265,3 +278,68 @@ async def _run_pipeline_background(
         _jobs[job_id]["status"] = "failed"
         _jobs[job_id]["error_message"] = str(e)
         _jobs[job_id]["progress_percent"] = 100.0
+
+
+@router.post(
+    "/generate/agents",
+    response_model=PipelineStatusResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Generate Reports with Agent-Based Workflow",
+    description="""
+    Start asynchronous generation using the agent-based workflow.
+
+    This uses specialist agents (Extractor, Analyst, Writer, QC) with:
+    - Parallel analysis (Stage 2A/2B/2C)
+    - QC-driven revision loops
+    - Mixed LLM providers (Gemini for extraction/analysis, Claude for writing/QC)
+
+    Returns immediately with a job ID that can be used to check status.
+    """,
+)
+async def generate_reports_with_agents(
+    request: GenerateReportRequest,
+    background_tasks: BackgroundTasks,
+) -> PipelineStatusResponse:
+    """Generate patent litigation reports using agent-based workflow.
+
+    Args:
+        request: Request containing patent and history PDF URLs
+        background_tasks: FastAPI background tasks
+
+    Returns:
+        Response containing job ID for status polling
+    """
+    job_id = str(uuid.uuid4())
+
+    logger.info(
+        "Starting agent-based report generation",
+        job_id=job_id,
+        patent_url=request.patent_pdf_url[:50] + "...",
+        history_url=request.history_pdf_url[:50] + "...",
+    )
+
+    # Initialize job status
+    _jobs[job_id] = {
+        "status": "pending",
+        "current_stage": "queued",
+        "progress_percent": 0.0,
+        "result": None,
+        "error_message": None,
+        "use_agents": True,
+    }
+
+    # Add background task with agents enabled
+    background_tasks.add_task(
+        _run_pipeline_background,
+        job_id,
+        request.patent_pdf_url,
+        request.history_pdf_url,
+        use_agents=True,
+    )
+
+    return PipelineStatusResponse(
+        job_id=job_id,
+        status="pending",
+        current_stage="queued",
+        progress_percent=0.0,
+    )
